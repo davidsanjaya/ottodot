@@ -337,3 +337,8 @@ Focus was placed on:
 - Data integrity
 - API design
 - Transaction safety
+
+## Video Walkthrough
+
+Google Drive:
+https://drive.google.com/file/d/1qeYtb29yc1GbKsktwDgapZn1cjqpbODi/view?usp=sharing
