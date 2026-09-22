@@ -1,0 +1,59 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Parent {
+  id       Int       @id @default(autoincrement())
+  name     String
+  students Student[]
+}
+
+model Student {
+  id       Int       @id @default(autoincrement())
+  name     String
+  parentId Int
+  bookings Booking[]
+  parent   Parent    @relation(fields: [parentId], references: [id])
+}
+
+model TrialClass {
+  id       Int       @id @default(autoincrement())
+  name     String
+  capacity Int       @default(4)
+  bookings Booking[]
+}
+
+model Booking {
+  id              Int              @id @default(autoincrement())
+  studentId       Int
+  classId         Int
+  status          BookingStatus    @default(PENDING_PAYMENT)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  trialClass      TrialClass       @relation(fields: [classId], references: [id])
+  student         Student          @relation(fields: [studentId], references: [id])
+  paymentAttempts PaymentAttempt[]
+
+  @@unique([studentId, classId])
+}
+
+model PaymentAttempt {
+  id        Int      @id @default(autoincrement())
+  bookingId Int
+  success   Boolean
+  createdAt DateTime @default(now())
+  booking   Booking  @relation(fields: [bookingId], references: [id])
+}
+
+enum BookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  PAYMENT_FAILED
+  CANCELLED
+}
