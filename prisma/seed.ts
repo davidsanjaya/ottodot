@@ -8,7 +8,7 @@ async function main() {
   await prisma.student.deleteMany();
   await prisma.parent.deleteMany();
   await prisma.trialClass.deleteMany();
-  const parent = await prisma.parent.create({
+  await prisma.parent.create({
     data: {
       name: "John Doe",
       students: {
@@ -17,16 +17,48 @@ async function main() {
     },
   });
 
-  console.log("Parent created:", parent);
+  await prisma.parent.create({
+    data: {
+      name: "Jane Smith",
+      students: {
+        create: [{ name: "Charlie" }],
+      },
+    },
+  });
 
-  const trialClass = await prisma.trialClass.create({
+  await prisma.parent.create({
+    data: {
+      name: "Michael Brown",
+      students: {
+        create: [{ name: "David" }],
+      },
+    },
+  });
+
+  await prisma.parent.create({
+    data: {
+      name: "Sarah Wilson",
+      students: {
+        create: [{ name: "Emma" }],
+      },
+    },
+  });
+
+  await prisma.parent.create({
+    data: {
+      name: "Robert Taylor",
+      students: {
+        create: [{ name: "Frank" }],
+      },
+    },
+  });
+
+  await prisma.trialClass.create({
     data: {
       name: "Saturday Trial Class",
       capacity: 4,
     },
   });
-
-  console.log("Trial class created:", trialClass);
 }
 
 main()

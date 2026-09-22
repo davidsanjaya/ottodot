@@ -57,10 +57,37 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Parent booking rule
     if (parentBooking) {
       return NextResponse.json(
         {
           error: "Parent already has a child booked into this class",
+        },
+        { status: 409 },
+      );
+    }
+
+    // Capacity rule
+    const trialClass = await prisma.trialClass.findUnique({
+      where: {
+        id: classId,
+      },
+    });
+
+    if (!trialClass) {
+      return NextResponse.json({ error: "Class not found" }, { status: 404 });
+    }
+
+    const bookingCount = await prisma.booking.count({
+      where: {
+        classId,
+      },
+    });
+
+    if (bookingCount >= trialClass.capacity) {
+      return NextResponse.json(
+        {
+          error: "Class is full",
         },
         { status: 409 },
       );
@@ -86,15 +113,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-export async function GET() {
-  const bookings = await prisma.booking.findMany({
-    include: {
-      student: true,
-      trialClass: true,
-    },
-  });
-
-  return NextResponse.json(bookings);
 }
