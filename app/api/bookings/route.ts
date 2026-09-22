@@ -2,115 +2,94 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
+  const body = await request.json();
+
+  const { studentId, classId } = body;
+
+  if (!studentId || !classId) {
+    return NextResponse.json(
+      { error: "studentId and classId are required" },
+      { status: 400 },
+    );
+  }
+
   try {
-    const body = await request.json();
-
-    const { studentId, classId } = body;
-
-    // Validation
-    if (!studentId || !classId) {
-      return NextResponse.json(
-        { error: "studentId and classId are required" },
-        { status: 400 },
-      );
-    }
-
-    // Student must exist
-    const student = await prisma.student.findUnique({
-      where: {
-        id: studentId,
-      },
-    });
-
-    if (!student) {
-      return NextResponse.json({ error: "Student not found" }, { status: 404 });
-    }
-
-    // Rule #1:
-    // Student cannot book the same class twice
-    const existingBooking = await prisma.booking.findFirst({
-      where: {
-        studentId,
-        classId,
-      },
-    });
-
-    if (existingBooking) {
-      return NextResponse.json(
-        { error: "Student already booked this class" },
-        { status: 409 },
-      );
-    }
-
-    // Rule #2:
-    // Parent cannot book multiple children
-    // into the same trial class
-    const parentBooking = await prisma.booking.findFirst({
-      where: {
-        classId,
-        student: {
-          parentId: student.parentId,
+    const booking = await prisma.$transaction(async (tx) => {
+      // Rule 1
+      const existingBooking = await tx.booking.findFirst({
+        where: {
+          studentId,
+          classId,
         },
-      },
-      include: {
-        student: true,
-      },
-    });
+      });
 
-    // Parent booking rule
-    if (parentBooking) {
-      return NextResponse.json(
-        {
-          error: "Parent already has a child booked into this class",
+      if (existingBooking) {
+        throw new Error("Student already booked this class");
+      }
+
+      // Find student
+      const student = await tx.student.findUnique({
+        where: {
+          id: studentId,
         },
-        { status: 409 },
-      );
-    }
+      });
 
-    // Capacity rule
-    const trialClass = await prisma.trialClass.findUnique({
-      where: {
-        id: classId,
-      },
-    });
+      if (!student) {
+        throw new Error("Student not found");
+      }
 
-    if (!trialClass) {
-      return NextResponse.json({ error: "Class not found" }, { status: 404 });
-    }
-
-    const bookingCount = await prisma.booking.count({
-      where: {
-        classId,
-      },
-    });
-
-    if (bookingCount >= trialClass.capacity) {
-      return NextResponse.json(
-        {
-          error: "Class is full",
+      // Rule 2
+      const siblingBooking = await tx.booking.findFirst({
+        where: {
+          classId,
+          student: {
+            parentId: student.parentId,
+          },
         },
-        { status: 409 },
-      );
-    }
+      });
 
-    // Create booking
-    const booking = await prisma.booking.create({
-      data: {
-        studentId,
-        classId,
-        status: "PENDING_PAYMENT",
-      },
+      if (siblingBooking) {
+        throw new Error("Parent already has a child booked into this class");
+      }
+
+      // Rule 3
+      const trialClass = await tx.trialClass.findUnique({
+        where: {
+          id: classId,
+        },
+      });
+
+      if (!trialClass) {
+        throw new Error("Class not found");
+      }
+
+      const bookingCount = await tx.booking.count({
+        where: {
+          classId,
+        },
+      });
+
+      if (bookingCount >= trialClass.capacity) {
+        throw new Error("Class is full");
+      }
+
+      // Create booking
+      return await tx.booking.create({
+        data: {
+          studentId,
+          classId,
+          status: "PENDING_PAYMENT",
+        },
+      });
     });
 
     return NextResponse.json(booking);
   } catch (error) {
-    console.error(error);
-
     return NextResponse.json(
       {
-        error: "Internal Server Error",
+        error: error instanceof Error ? error.message : "Booking failed",
       },
-      { status: 500 },
+      { status: 409 },
     );
   }
 }

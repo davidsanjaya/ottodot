@@ -1,36 +1,339 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Ottodot Booking System
 
-## Getting Started
+A simple trial class booking system built with Next.js, Prisma, and SQLite.
 
-First, run the development server:
+## Overview
+
+This project implements a booking system for trial classes where parents can register children into available classes.
+
+The system enforces several business rules:
+
+1. A student cannot book the same class twice.
+2. A parent cannot book multiple children into the same class.
+3. A class cannot exceed its capacity.
+4. Bookings require payment confirmation.
+5. Booking creation uses database transactions to reduce race-condition risks.
+
+---
+
+## Tech Stack
+
+- Next.js 15
+- TypeScript
+- Prisma ORM
+- SQLite
+
+---
+
+## Database Schema
+
+### Parent
+
+Represents a parent account.
+
+| Field | Type   |
+| ----- | ------ |
+| id    | Int    |
+| name  | String |
+
+### Student
+
+Represents a child belonging to a parent.
+
+| Field    | Type   |
+| -------- | ------ |
+| id       | Int    |
+| name     | String |
+| parentId | Int    |
+
+### TrialClass
+
+Represents a trial class.
+
+| Field    | Type   |
+| -------- | ------ |
+| id       | Int    |
+| name     | String |
+| capacity | Int    |
+
+### Booking
+
+Represents a class reservation.
+
+| Field     | Type          |
+| --------- | ------------- |
+| id        | Int           |
+| studentId | Int           |
+| classId   | Int           |
+| status    | BookingStatus |
+
+### PaymentAttempt
+
+Stores simulated payment attempts.
+
+| Field     | Type    |
+| --------- | ------- |
+| id        | Int     |
+| bookingId | Int     |
+| success   | Boolean |
+
+---
+
+## Booking Status
+
+```ts
+enum BookingStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  PAYMENT_FAILED
+  CANCELLED
+}
+```
+
+---
+
+## Business Rules
+
+### Rule 1
+
+A student cannot book the same class twice.
+
+Example:
+
+```
+Alice -> Saturday Trial Class
+Alice -> Saturday Trial Class ❌
+```
+
+Returns:
+
+```json
+{
+  "error": "Student already booked this class"
+}
+```
+
+---
+
+### Rule 2
+
+A parent cannot register multiple children into the same class.
+
+Example:
+
+```
+John Doe
+ ├─ Alice
+ └─ Bob
+
+Alice -> Saturday Trial Class ✅
+Bob -> Saturday Trial Class ❌
+```
+
+Returns:
+
+```json
+{
+  "error": "Parent already has a child booked into this class"
+}
+```
+
+---
+
+### Rule 3
+
+Class capacity cannot be exceeded.
+
+Example:
+
+```
+Capacity = 4
+
+Booking #1 ✅
+Booking #2 ✅
+Booking #3 ✅
+Booking #4 ✅
+Booking #5 ❌
+```
+
+Returns:
+
+```json
+{
+  "error": "Class is full"
+}
+```
+
+---
+
+### Rule 4
+
+Payment Confirmation
+
+Bookings are initially created with:
+
+```json
+{
+  "status": "PENDING_PAYMENT"
+}
+```
+
+After payment simulation:
+
+```json
+{
+  "status": "CONFIRMED"
+}
+```
+
+or
+
+```json
+{
+  "status": "PAYMENT_FAILED"
+}
+```
+
+---
+
+## API Endpoints
+
+### Create Booking
+
+POST
+
+```
+/api/bookings
+```
+
+Request
+
+```json
+{
+  "studentId": 9,
+  "classId": 5
+}
+```
+
+---
+
+### Simulate Payment
+
+POST
+
+```
+/api/bookings/{id}/pay
+```
+
+Request
+
+```json
+{
+  "success": true
+}
+```
+
+---
+
+### View Class Bookings
+
+GET
+
+```
+/api/classes/{id}/bookings
+```
+
+Response
+
+```json
+{
+  "id": 5,
+  "name": "Saturday Trial Class",
+  "capacity": 4,
+  "totalBookings": 4,
+  "remainingSeats": 0
+}
+```
+
+---
+
+## Running Locally
+
+Install dependencies
+
+```bash
+npm install
+```
+
+Run migrations
+
+```bash
+npx prisma migrate deploy
+```
+
+Generate Prisma Client
+
+```bash
+npx prisma generate
+```
+
+Seed database
+
+```bash
+npm run seed
+```
+
+Start development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Race Condition Handling
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Booking creation is wrapped inside a Prisma transaction.
 
-## Learn More
+This ensures that:
 
-To learn more about Next.js, take a look at the following resources:
+- Capacity checks
+- Duplicate booking checks
+- Parent booking checks
+- Booking creation
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+are executed as a single database operation.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Although SQLite has limitations for true concurrent writes, the transaction structure is designed to be easily migrated to PostgreSQL or MySQL.
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Assumptions
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- One student can only attend a class once.
+- One parent may only have one child in a given class.
+- Capacity includes pending and confirmed bookings.
+- Payment processing is simulated.
+
+---
+
+## Future Improvements
+
+- Authentication
+- Real payment gateway integration
+- Booking cancellation endpoint
+- Admin dashboard
+- Waitlist support
+- PostgreSQL deployment
+- Automated tests
+
+## Time Spent
+
+Approximately 4 hours.
+
+Focus was placed on:
+
+- Correct business rule enforcement
+- Data integrity
+- API design
+- Transaction safety
